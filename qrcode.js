@@ -443,26 +443,36 @@ exports.qrcode = function() {
 
 			return qrHtml;
 		};
-
-		_this.createImgTag = function(cellSize, margin) {
-
-			cellSize = cellSize || 2;
-			margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
-
-			var size = _this.getModuleCount() * cellSize + margin * 2;
-			var min = margin;
-			var max = size - margin;
-
-			return createImgTag(size, size, function(x, y) {
-				if (min <= x && x < max && min <= y && y < max) {
-					var c = Math.floor( (x - min) / cellSize);
-					var r = Math.floor( (y - min) / cellSize);
-					return _this.isDark(r, c)? 0 : 1;
-				} else {
-					return 1;
-				}
-			} );
-		};
+	
+	        _this.createImg = function (cellSize, margin, isHtml) {
+	            cellSize = cellSize || 2;
+	            margin = (typeof margin == 'undefined') ? cellSize * 4 : margin;
+	
+	            var size = _this.getModuleCount() * cellSize + margin * 2;
+	            var min = margin;
+	            var max = size - margin;
+	
+	            var getPixel = function (x, y) {
+	                if (min <= x && x < max && min <= y && y < max) {
+	                    var c = Math.floor((x - min) / cellSize);
+	                    var r = Math.floor((y - min) / cellSize);
+	                    return _this.isDark(r, c) ? 0 : 1;
+	                } else {
+	                    return 1;
+	                }
+	            };
+	
+	            if (isHtml) {
+	                return createImgTag(size, size, getPixel);
+	            }
+	            else {
+	                return createImgByte(size, size, getPixel);
+	            }
+	        };
+	
+	        _this.createImgTag = function (cellSize, margin) {
+	            return _this.createImg(cellSize, margin, true);
+	        };
 
 		return _this;
 	};
@@ -472,12 +482,24 @@ exports.qrcode = function() {
 	//---------------------------------------------------------------------
 
 	qrcode.stringToBytes = function(s) {
-		var bytes = new Array();
-		for (var i = 0; i < s.length; i += 1) {
-			var c = s.charCodeAt(i);
-			bytes.push(c & 0xff);
-		}
-		return bytes;
+	        var bytes = [], char;
+	        s = encodeURI(s);
+	
+	        while (s.length) {
+	            char = s.slice(0, 1);
+	            s = s.slice(1);
+	
+	            if ('%' !== char) {
+	                bytes.push(char.charCodeAt(0));
+	            } else {
+	                char = s.slice(0, 2);
+	                s = s.slice(2);
+	
+	                bytes.push(parseInt(char, 16));
+	            }
+	        }
+	
+	        return bytes;
 	};
 
 	//---------------------------------------------------------------------
@@ -1586,20 +1608,23 @@ exports.qrcode = function() {
 		return _this;
 	};
 
-	var createImgTag = function(width, height, getPixel, alt) {
-
+	var createImgByte = function(width, height, getPixel) {
 		var gif = gifImage(width, height);
 		for (var y = 0; y < height; y += 1) {
-			for (var x = 0; x < width; x += 1) {
-				gif.setPixel(x, y, getPixel(x, y) );
-			}
+		    for (var x = 0; x < width; x += 1) {
+		        gif.setPixel(x, y, getPixel(x, y) );
+		    }
 		}
-
+		
 		var b = byteArrayOutputStream();
 		gif.write(b);
-
+		
+		return b.toByteArray();
+	};
+	
+	var createImgTag = function(width, height, getPixel, alt) {
 		var base64 = base64EncodeOutputStream();
-		var bytes = b.toByteArray();
+		var bytes = createImgByte(width, height, getPixel);
 		for (var i = 0; i < bytes.length; i += 1) {
 			base64.writeByte(bytes[i]);
 		}
